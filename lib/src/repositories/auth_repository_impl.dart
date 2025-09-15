@@ -4,6 +4,7 @@ import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:zenify_auth/src/config/api_base_url.dart';
 import 'package:zenify_auth/zenify_auth.dart';
 
 import 'auth_repository.dart';
@@ -43,55 +44,6 @@ class AuthRepositoryImpl<T> implements AuthRepository<T> {
   }
   // Login method
   @override
-  Future<T?> login(String email, String password) async {
-    try {
-      final response = await _dio.post(
-        "/api/auth/login",
-        data: {"username": email, "password": password},
-      );
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final resData = response.data;
-
-        // Save token and userId in Hive
-        await _box.put('authToken', resData['access_token']);
-        await _box.put('userId', resData['data']['id']);
-
-        // Get auth cookie (optional, for debug or further usage)
-        var cookieValue = await getAuthCookie();
-        if (cookieValue != null && cookieValue.isNotEmpty) {
-          await _box.put('cookie', cookieValue);
-          print("Cookie saved: $cookieValue");
-        } else {
-          print("No cookie to save");
-        }
-        // ✅ Initialize socket automatically after login
-        await SocketIOManager.instance.initialize(
-          url:
-              "https://api.staging.zenifytrip.com", // replace with your Socket.IO URL
-        );
-
-        return fromJson(resData['data']);
-      } else {
-        print("Login failed: ${response.statusCode}");
-        print("Response: ${response.data}");
-        return null;
-      }
-    } on DioException catch (e) {
-      print("Dio error: ${e.message}");
-      if (e.response != null) {
-        print("Status code: ${e.response!.statusCode}");
-        print("Response: ${e.response!.data}");
-      }
-      return null;
-    } catch (e) {
-      print("Unexpected error: $e");
-      return null;
-    }
-  }
-
-  // // Login method
-  // @override
   // Future<T?> login(String email, String password) async {
   //   try {
   //     final response = await _dio.post(
@@ -105,7 +57,21 @@ class AuthRepositoryImpl<T> implements AuthRepository<T> {
   //       // Save token and userId in Hive
   //       await _box.put('authToken', resData['access_token']);
   //       await _box.put('userId', resData['data']['id']);
-  //       getAuthCookie();
+
+  //       // Get auth cookie (optional, for debug or further usage)
+  //       var cookieValue = await getAuthCookie();
+  //       if (cookieValue != null && cookieValue.isNotEmpty) {
+  //         await _box.put('cookie', cookieValue);
+  //         print("Cookie saved: $cookieValue");
+  //       } else {
+  //         print("No cookie to save");
+  //       }
+  //       // ✅ Initialize socket automatically after login
+  //       await SocketIOManager.instance.initialize(
+  //         url:
+  //             baseUrl, // replace with your Socket.IO URL
+  //       );
+
   //       return fromJson(resData['data']);
   //     } else {
   //       print("Login failed: ${response.statusCode}");
@@ -125,7 +91,43 @@ class AuthRepositoryImpl<T> implements AuthRepository<T> {
   //   }
   // }
 
-  // Logout method
+Future<T?> login(String email, String password) async {
+  try {
+    final response = await _dio.post(
+      "/api/auth/login",
+      data: {"username": email, "password": password},
+    );
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      final resData = response.data;
+
+      await _box.put('authToken', resData['access_token']);
+      await _box.put('userId', resData['data']['id']);
+
+      var cookieValue = await getAuthCookie();
+      if (cookieValue != null && cookieValue.isNotEmpty) {
+        await _box.put('cookie', cookieValue);
+        print("Cookie saved: $cookieValue");
+      }
+
+      // ✅ Use global API Base URL here
+      await SocketIOManager.instance.initialize(url: ApiBaseUrl.baseUrl);
+
+      return fromJson(resData['data']);
+    } else {
+      print("Login failed: ${response.statusCode}");
+      return null;
+    }
+  } on DioException catch (e) {
+    print("Dio error: ${e.message}");
+    return null;
+  } catch (e) {
+    print("Unexpected error: $e");
+    return null;
+  }
+}
+
+
   @override
   Future<void> logout() async {
     if (!kIsWeb) await _cookieJar?.deleteAll();

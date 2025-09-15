@@ -18,28 +18,29 @@ export 'src/service/socketmanagement.dart';
 export 'src/entities/user.dart';
 export 'src/entities/coockie.dart';
 
+
+import 'src/config/api_base_url.dart';
+
 class ZenifyAuth {
   static late AuthRepositoryImpl<User> _authRepo;
 
-  /// Initialize the auth package
   static void initialize({
     required String baseUrl,
     required User Function(Map<String, dynamic>) fromJson,
     String profilePath = "/api/user",
   }) {
-    // Initialize Hive (if not already)
+    // Initialize API Base URL globally
+    ApiBaseUrl.initialize(baseUrl);
+
+    // Initialize Hive
     Hive.initFlutter();
-
-    // Register adapters
     Hive.registerAdapter(HiveCookieAdapter());
-    // Hive.registerAdapter(HiveUserAdapter());
-
-    // Open the authBox
     Hive.openBox('authBox');
     Hive.openBox('cookieBox');
+
     _authRepo = AuthRepositoryImpl<User>(fromJson: fromJson, baseUrl: baseUrl);
   }
 
-  /// Get the initialized repository
   static AuthRepositoryImpl<User> get authRepo => _authRepo;
 }
+

@@ -12,6 +12,7 @@ export 'src/repositories/auth_repository_impl.dart';
 // providers
 export 'src/providers/auth_provider.dart';
 export 'src/ui/login.dart';
+export 'src/ui/registerScreen.dart';
 export 'src/service/socketmanagement.dart';
 
 // optional: default User entity

@@ -41,6 +41,54 @@ class AuthRepositoryImpl<T> implements AuthRepository<T> {
       ),
     );
   }
+  @override
+  Future<T?> register(String name, String email, String password) async {
+    try {
+      final response = await _dio.post(
+        "/api/auth/login",
+        data: {"username": email, "password": password},
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final resData = response.data;
+
+        // Save token and userId in Hive
+        await _box.put('authToken', resData['access_token']);
+        await _box.put('userId', resData['data']['id']);
+
+        // Get auth cookie (optional, for debug or further usage)
+        var cookieValue = await getAuthCookie();
+        if (cookieValue != null && cookieValue.isNotEmpty) {
+          await _box.put('cookie', cookieValue);
+          print("Cookie saved: $cookieValue");
+        } else {
+          print("No cookie to save");
+        }
+        // ✅ Initialize socket automatically after login
+        await SocketIOManager.instance.initialize(
+          url:
+              _dio.options.baseUrl, // replace with your Socket.IO URL
+        );
+
+        return fromJson(resData['data']);
+      } else {
+        print("Login failed: ${response.statusCode}");
+        print("Response: ${response.data}");
+        return null;
+      }
+    } on DioException catch (e) {
+      print("Dio error: ${e.message}");
+      if (e.response != null) {
+        print("Status code: ${e.response!.statusCode}");
+        print("Response: ${e.response!.data}");
+      }
+      return null;
+    } catch (e) {
+      print("Unexpected error: $e");
+      return null;
+    }
+  }
+
   // Login method
   @override
   Future<T?> login(String email, String password) async {
@@ -68,7 +116,7 @@ class AuthRepositoryImpl<T> implements AuthRepository<T> {
         // ✅ Initialize socket automatically after login
         await SocketIOManager.instance.initialize(
           url:
-              "https://api.staging.zenifytrip.com", // replace with your Socket.IO URL
+            _dio.options.baseUrl, // replace with your Socket.IO URL
         );
 
         return fromJson(resData['data']);
@@ -129,6 +177,8 @@ class AuthRepositoryImpl<T> implements AuthRepository<T> {
   @override
   Future<void> logout() async {
     if (!kIsWeb) await _cookieJar?.deleteAll();
+    await _box.delete('ZENIFY_SESSION_ID'); // Removes all saved cookies
+    print("All cookies cleared");
     await _box.clear();
   }
 

@@ -47,7 +47,16 @@ class AuthNotifier<T> extends StateNotifier<AuthState<T>> {
       return false;
     }
   }
-
+  Future<bool> register(String email, String password, String name) async {
+    final user = await repository.register(email, password, name);
+    if (user != null) {
+      state = state.copyWith(user: user, status: AuthStatus.authenticated);
+      return true;
+    } else {
+      state = state.copyWith(user: null, status: AuthStatus.unauthenticated);
+      return false;
+    }
+  }
   Future<void> logout() async {
     await repository.logout();
     state = state.copyWith(user: null, status: AuthStatus.unauthenticated);

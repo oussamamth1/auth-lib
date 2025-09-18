@@ -103,6 +103,7 @@ class SocketIOManager {
     final box = await Hive.openBox('authBox'); // Use your actual box name
     var b = await Hive.openBox('cookieBox');
     _notifyListeners();
+    //
     var headers = <String, String>{};
     String? cookieValue = await b.get('ZENIFY_SESSION_ID');
     // We saved this at login
@@ -151,6 +152,7 @@ class SocketIOManager {
 
     socket.onConnectError((err) {
       _isConnected = false;
+      _isReconnecting = false;
       print('Socket connection error: $err');
       _notifyListeners();
       _scheduleReconnection("https://api.staging.zenifytrip.com");
@@ -160,6 +162,7 @@ class SocketIOManager {
     socket.onError((error) {
       print('Socket error: $error');
       _isConnected = false;
+      _isReconnecting = false;
       _scheduleReconnection("https://api.staging.zenifytrip.com");
     });
   }

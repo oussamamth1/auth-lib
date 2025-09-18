@@ -12,6 +12,12 @@ class LoginScreen extends ConsumerStatefulWidget {
   /// Callback for Forgot Password button
   final VoidCallback? onForgotPassword;
 
+  /// Whether to show "Login with Code" button
+  final bool showLoginwithCode;
+
+  /// Callback for Login with Code button
+  final VoidCallback? onLoginwithCode;
+
   /// Background image path (optional)
   final String? backgroundImage;
 
@@ -58,6 +64,9 @@ class LoginScreen extends ConsumerStatefulWidget {
 
   /// Custom forgot password button text
   final String forgotPasswordText;
+
+  /// Custom login with code button text
+  final String loginWithCodeText;
 
   /// Email field label
   final String emailLabel;
@@ -138,6 +147,9 @@ class LoginScreen extends ConsumerStatefulWidget {
   /// Custom button style for register button
   final ButtonStyle? registerButtonStyle;
 
+  /// Custom button style for login with code button
+  final ButtonStyle? loginWithCodeButtonStyle;
+
   /// Whether to show password strength indicator
   final bool showPasswordStrength;
 
@@ -151,13 +163,14 @@ class LoginScreen extends ConsumerStatefulWidget {
     super.key,
     this.snackBarColor = Colors.red,
     this.showForgotPassword = false,
+    this.showLoginwithCode = false,
     this.onForgotPassword,
+    this.onLoginwithCode,
     this.backgroundImage,
     this.canRegister = false,
     this.onRegister,
     this.backgroundImageFit = BoxFit.cover,
     this.overlayColor,
-
     // New parameters with defaults
     this.logo,
     this.title,
@@ -169,6 +182,7 @@ class LoginScreen extends ConsumerStatefulWidget {
     this.loginButtonText = 'Login',
     this.registerButtonText = 'Register',
     this.forgotPasswordText = 'Forgot Password?',
+    this.loginWithCodeText = 'Login with Code',
     this.emailLabel = 'Email',
     this.passwordLabel = 'Password',
     this.showRememberMe = false,
@@ -196,6 +210,7 @@ class LoginScreen extends ConsumerStatefulWidget {
     this.dividerText = 'OR',
     this.loginButtonStyle,
     this.registerButtonStyle,
+    this.loginWithCodeButtonStyle,
     this.showPasswordStrength = false,
     this.minPasswordLength = 8,
     this.weakPasswordMessage,
@@ -480,6 +495,43 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
+  Widget _buildForgotPasswordAndLoginWithCode() {
+    // Build the right side actions (Forgot Password and/or Login with Code)
+    List<Widget> actions = [];
+
+    if (widget.showForgotPassword) {
+      actions.add(
+        TextButton(
+          onPressed: widget.onForgotPassword,
+          child: Text(widget.forgotPasswordText),
+        ),
+      );
+    }
+
+    if (widget.showLoginwithCode) {
+      actions.add(
+        TextButton(
+          onPressed: widget.onLoginwithCode,
+          style: widget.loginWithCodeButtonStyle,
+          child: Text(widget.loginWithCodeText),
+        ),
+      );
+    }
+
+    if (actions.isEmpty) return const SizedBox.shrink();
+
+    // If both are shown, stack them vertically on the right
+    if (actions.length > 1) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: actions,
+      );
+    }
+
+    // If only one is shown, display it normally
+    return actions.first;
+  }
+
   Widget _buildBiometricLogin() {
     if (!widget.enableBiometricLogin) return const SizedBox.shrink();
 
@@ -523,10 +575,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         ...widget.socialProviders!.map(
           (provider) => Padding(
             padding: const EdgeInsets.only(bottom: 12, right: 8, left: 8),
-            child:  Container(
-                width: double.infinity,
-                child:
-OutlinedButton.icon(
+            child: Container(
+              width: double.infinity,
+              child: OutlinedButton.icon(
                 onPressed: provider.onPressed,
                 icon: provider.icon,
                 label: Text('Continue with ${provider.name}'),
@@ -534,8 +585,8 @@ OutlinedButton.icon(
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   backgroundColor: provider.backgroundColor,
                   foregroundColor: provider.textColor,
- ) ),
-              
+                ),
+              ),
             ),
           ),
         ),
@@ -640,16 +691,12 @@ OutlinedButton.icon(
             _buildPasswordField(),
             const SizedBox(height: 16),
 
-            // Remember Me & Forgot Password Row
+            // Remember Me & Forgot Password/Login with Code Row
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 _buildRememberMe(),
-                if (widget.showForgotPassword)
-                  TextButton(
-                    onPressed: widget.onForgotPassword,
-                    child: Text(widget.forgotPasswordText),
-                  ),
+                _buildForgotPasswordAndLoginWithCode(),
               ],
             ),
 

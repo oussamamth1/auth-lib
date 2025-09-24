@@ -146,7 +146,8 @@ class User extends HiveObject {
   String? updaterUserId;
   @HiveField(47)
   final String? token;
-
+  @HiveField(48)
+  final String? cookie;
   User({
     this.id,
     this.role,
@@ -194,7 +195,9 @@ class User extends HiveObject {
     this.createdAt,
     this.creatorUserId,
     this.updatedAt,
-    this.updaterUserId,this.token,
+    this.updaterUserId,
+    this.token,
+    this.cookie,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
@@ -262,7 +265,8 @@ class User extends HiveObject {
           ? DateTime.tryParse(json['updatedAt'])
           : null,
       updaterUserId: json['updaterUserId'] as String?,
-      token: json['access_token'] as String?,
+      token: json['token'] as String?,
+      cookie: json['cookie'] as String?,
     );
   }
 
@@ -314,6 +318,7 @@ class User extends HiveObject {
     'creatorUserId': creatorUserId,
     'updatedAt': updatedAt?.toIso8601String(),
     'updaterUserId': updaterUserId,
-'token':token
+    'token': token,
+    'cookie': cookie,
   };
 }

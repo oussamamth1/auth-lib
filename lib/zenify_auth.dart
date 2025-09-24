@@ -27,20 +27,42 @@ class ZenifyAuth {
     required String baseUrl,
     required User Function(Map<String, dynamic>) fromJson,
     String profilePath = "/api/user",
-  }) {
+  }) async {
     // Initialize Hive (if not already)
-    Hive.initFlutter();
+    await Hive.initFlutter();
 
     // Register adapters
     Hive.registerAdapter(HiveCookieAdapter());
     // Hive.registerAdapter(HiveUserAdapter());
 
     // Open the authBox
-    Hive.openBox('authBox');
-    Hive.openBox('cookieBox');
+    await Hive.openBox('authBox');
+    await Hive.openBox('cookieBox');
     _authRepo = AuthRepositoryImpl<User>(fromJson: fromJson, baseUrl: baseUrl);
   }
 
   /// Get the initialized repository
   static AuthRepositoryImpl<User> get authRepo => _authRepo;
+
+  /// 🔹 Return saved user JSON (if exists)
+  static Map<String, dynamic>? getSavedUser() {
+    final box = Hive.box('authBox');
+    final raw = box.get('user'); // key you used when saving user
+    if (raw is Map) {
+      return Map<String, dynamic>.from(raw);
+    }
+    return null;
+  }
+
+  /// 🔹 Return saved token
+  static String? getSavedToken() {
+    final box = Hive.box('authBox');
+    return box.get('authToken'); // assumes you saved token under "token"
+  }
+
+  /// 🔹 Return saved cookies
+  static String? getSavedCookies() {
+    final box = Hive.box('cookieBox');
+    return box.values.first.toString();
+  }
 }

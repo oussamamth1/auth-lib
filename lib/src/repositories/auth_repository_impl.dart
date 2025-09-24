@@ -12,6 +12,7 @@ class AuthRepositoryImpl<T> implements AuthRepository<T> {
   final Dio _dio;
   final Box _box;
   final T Function(Map<String, dynamic>) fromJson;
+
   CookieJar? _cookieJar;
 
   AuthRepositoryImpl({
@@ -22,8 +23,8 @@ class AuthRepositoryImpl<T> implements AuthRepository<T> {
   }) : _dio = dio ?? Dio(),
        _box = box ?? Hive.box('authBox') {
     _dio.options.baseUrl = baseUrl;
-    _dio.options.connectTimeout = const Duration(seconds: 10);
-    _dio.options.receiveTimeout = const Duration(seconds: 10);
+    _dio.options.connectTimeout = const Duration(seconds: 30);
+    _dio.options.receiveTimeout = const Duration(seconds: 30);
 
     if (!kIsWeb) {
       _cookieJar = CookieJar();
@@ -45,7 +46,7 @@ class AuthRepositoryImpl<T> implements AuthRepository<T> {
   Future<T?> register(String name, String email, String password) async {
     try {
       final response = await _dio.post(
-        "/api/auth/login",
+        "/api/auth/registeur",
         data: {"username": email, "password": password},
       );
 
@@ -66,9 +67,55 @@ class AuthRepositoryImpl<T> implements AuthRepository<T> {
         }
         // ✅ Initialize socket automatically after login
         await SocketIOManager.instance.initialize(
-          url:
-              _dio.options.baseUrl, // replace with your Socket.IO URL
+          url: _dio.options.baseUrl, // replace with your Socket.IO URL
         );
+
+        return fromJson(resData['data']);
+      } else {
+        print("Login failed: ${response.statusCode}");
+        print("Response: ${response.data}");
+        return null;
+      }
+    } on DioException catch (e) {
+      print("Dio error: ${e.message}");
+      if (e.response != null) {
+        print("Status code: ${e.response!.statusCode}");
+        print("Response: ${e.response!.data}");
+      }
+      return null;
+    } catch (e) {
+      print("Unexpected error: $e");
+      return null;
+    }
+  }
+
+  @override
+  Future<T?> verifyCode(String code) async {
+    try {
+      final response = await _dio.post(
+        "/api/auth/loginwithcode",
+        data: {"code": code},
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final resData = response.data;
+
+        // Save token and userId in Hive
+        await _box.put('authToken', resData['access_token']);
+        await _box.put('userId', resData['data']['id']);
+
+        // Get auth cookie (optional, for debug or further usage)
+        var cookieValue = await getAuthCookie();
+        if (cookieValue != null && cookieValue.isNotEmpty) {
+          await _box.put('cookie', cookieValue);
+          print("Cookie saved: $cookieValue");
+        } else {
+          print("No cookie to save");
+        }
+        // ✅ Initialize socket automatically after login
+        // await SocketIOManager.instance.initialize(
+        //   url: _dio.options.baseUrl, // replace with your Socket.IO URL
+        // );
 
         return fromJson(resData['data']);
       } else {
@@ -92,6 +139,7 @@ class AuthRepositoryImpl<T> implements AuthRepository<T> {
   // Login method
   @override
   Future<T?> login(String email, String password) async {
+    var b = await Hive.openBox('cookieBox');
     try {
       final response = await _dio.post(
         "/api/auth/login",
@@ -114,12 +162,25 @@ class AuthRepositoryImpl<T> implements AuthRepository<T> {
           print("No cookie to save");
         }
         // ✅ Initialize socket automatically after login
-        await SocketIOManager.instance.initialize(
-          url:
-            _dio.options.baseUrl, // replace with your Socket.IO URL
-        );
+        // await SocketIOManager.instance.initialize(
+        //   url: _dio.options.baseUrl, // replace with your Socket.IO URL
+        // );
+        final savedCookie = await b.get('ZENIFY_SESSION_ID');
+        final injected = {
+          ...(resData['data']
+              as Map<String, dynamic>), // force cast to correct type
+          'token': resData['access_token'],
+          'cookie': savedCookie,
+        };
 
-        return fromJson(resData['data']);
+        print("Injected user map: $injected"); // debug log
+
+        return fromJson(injected);
+
+        // return fromJson({
+        //   ...resData['data'], // spread user fields
+        //   'token': resData['access_token'], // inject token
+        // });
       } else {
         print("Login failed: ${response.statusCode}");
         print("Response: ${response.data}");

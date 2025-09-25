@@ -13,6 +13,9 @@ export 'src/repositories/auth_repository_impl.dart';
 export 'src/providers/auth_provider.dart';
 export 'src/ui/login.dart';
 export 'src/ui/registerScreen.dart';
+export 'src/ui/authFlowScreen.dart';
+export 'src/ui/travellerList.dart';
+export 'src/ui/codeLoginScreen.dart';
 export 'src/service/socketmanagement.dart';
 
 // optional: default User entity
@@ -20,14 +23,31 @@ export 'src/entities/user.dart';
 export 'src/entities/coockie.dart';
 
 class ZenifyAuth {
-  static late AuthRepositoryImpl<User> _authRepo;
+  static AuthRepositoryImpl<User>? _authRepo;
+  static Future<void>? _initializationFuture;
+  static String? _baseUrl;
+  static User Function(Map<String, dynamic>)? _fromJson;
+  static String? _profilePath;
 
   /// Initialize the auth package
-  static void initialize({
+  static Future<void> initialize({
     required String baseUrl,
     required User Function(Map<String, dynamic>) fromJson,
     String profilePath = "/api/user",
   }) async {
+    // Store initialization parameters
+    _baseUrl = baseUrl;
+    _fromJson = fromJson;
+    _profilePath = profilePath;
+
+    // Only initialize once
+    _initializationFuture ??= _doInitialize();
+    return _initializationFuture!;
+  }
+
+  static Future<void> _doInitialize() async {
+    if (_authRepo != null) return; // Already initialized
+
     // Initialize Hive (if not already)
     await Hive.initFlutter();
 
@@ -38,11 +58,39 @@ class ZenifyAuth {
     // Open the authBox
     await Hive.openBox('authBox');
     await Hive.openBox('cookieBox');
-    _authRepo = AuthRepositoryImpl<User>(fromJson: fromJson, baseUrl: baseUrl);
+
+    _authRepo = AuthRepositoryImpl<User>(
+      fromJson: _fromJson!,
+      baseUrl: _baseUrl!,
+    );
   }
 
-  /// Get the initialized repository
-  static AuthRepositoryImpl<User> get authRepo => _authRepo;
+  /// Get the initialized repository (with automatic lazy initialization)
+  static Future<AuthRepositoryImpl<User>> get authRepoAsync async {
+    if (_authRepo != null) return _authRepo!;
+
+    if (_baseUrl == null || _fromJson == null) {
+      throw Exception(
+        'ZenifyAuth not configured. Call ZenifyAuth.initialize() first.',
+      );
+    }
+
+    await _doInitialize();
+    return _authRepo!;
+  }
+
+  /// Get the initialized repository (synchronous - throws if not initialized)
+  static AuthRepositoryImpl<User> get authRepo {
+    if (_authRepo == null) {
+      throw Exception(
+        'ZenifyAuth not initialized. Call ZenifyAuth.initialize() and await it first.',
+      );
+    }
+    return _authRepo!;
+  }
+
+  /// Check if ZenifyAuth has been initialized
+  static bool get isInitialized => _authRepo != null;
 
   /// 🔹 Return saved user JSON (if exists)
   static Map<String, dynamic>? getSavedUser() {

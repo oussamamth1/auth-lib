@@ -188,6 +188,8 @@ class AuthNotifier<T extends User> extends StateNotifier<AuthState<T>> {
         user: profile,
         status: AuthStatus.authenticated,
         isAuthenticated: true,
+        // token: profile.token,
+        // cookie: profile.cookie,
       );
     } else {
       state = state.copyWith(

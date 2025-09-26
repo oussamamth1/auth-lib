@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:zenify_auth/zenify_auth.dart';
 import '../providers/auth_provider.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -725,6 +726,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       setState(() => _loading = true);
 
                       try {
+                        // Clear any existing cached user data before login
+                        await ZenifyAuth.clearUserData();
+
                         var success = await ref
                             .read(authProvider.notifier)
                             .login(
@@ -738,6 +742,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         final user = authState.user;
 
                         if (success) {
+                          // Optionally fetch fresh user profile after successful login
+                          await ref
+                              .read(authProvider.notifier)
+                              .fetchUserProfile();
+                       //   await ZenifyAuth.saveUser(authState.user);
+                        //  await ZenifyAuth.saveAuthToken(authState.user?.token);
                           _showSnackBar(context, "Login Successful!");
                           if (!mounted) return;
                           // Navigator.of(context).pushReplacementNamed('/home');
@@ -771,7 +781,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ),
                     ),
                   ),
-
             // Biometric Login
             _buildBiometricLogin(),
 

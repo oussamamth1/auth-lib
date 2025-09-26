@@ -41,19 +41,19 @@ class ZenifyAuth {
     _profilePath = profilePath;
 
     // Only initialize once
-    _initializationFuture ??= _doInitialize();
-    return _initializationFuture!;
+    _doInitialize();
+    return _doInitialize();
   }
 
   static Future<void> _doInitialize() async {
-    if (_authRepo != null) return; // Already initialized
+    // if (_authRepo != null) return; // Already initialized
 
     // Initialize Hive (if not already)
     await Hive.initFlutter();
 
     // Register adapters
-    Hive.registerAdapter(HiveCookieAdapter());
-    // Hive.registerAdapter(HiveUserAdapter());
+    //Hive.registerAdapter(HiveCookieAdapter());
+    // Hive.registerAdapter(UserAdapter());
 
     // Open the authBox
     await Hive.openBox('authBox');
@@ -94,23 +94,240 @@ class ZenifyAuth {
 
   /// 🔹 Return saved user JSON (if exists)
   static Map<String, dynamic>? getSavedUser() {
-    final box = Hive.box('authBox');
-    final raw = box.get('user'); // key you used when saving user
-    if (raw is Map) {
-      return Map<String, dynamic>.from(raw);
+    try {
+      final box = Hive.box('authBox');
+      final raw = box.get('user'); // key you used when saving user
+      if (raw is Map) {
+        return Map<String, dynamic>.from(raw);
+      }
+      return null;
+    } catch (e) {
+      print('Error getting saved user: $e');
+      return null;
     }
-    return null;
   }
 
   /// 🔹 Return saved token
   static String? getSavedToken() {
-    final box = Hive.box('authBox');
-    return box.get('authToken'); // assumes you saved token under "token"
+    try {
+      final box = Hive.box('authBox');
+      return box.get('authToken'); // assumes you saved token under "token"
+    } catch (e) {
+      print('Error getting saved token: $e');
+      return null;
+    }
   }
 
   /// 🔹 Return saved cookies
   static String? getSavedCookies() {
-    final box = Hive.box('cookieBox');
-    return box.values.first.toString();
+    try {
+      final box = Hive.box('cookieBox');
+      if (box.values.isNotEmpty) {
+        return box.values.first.toString();
+      }
+      return null;
+    } catch (e) {
+      print('Error getting saved cookies: $e');
+      return null;
+    }
+  }
+
+  /// 🔹 Clear all saved authentication data (for logout)
+  static Future<void> clearSavedData() async {
+    try {
+      final authBox = Hive.box('authBox');
+      final cookieBox = Hive.box('cookieBox');
+
+      // Clear all auth data
+      await authBox.clear();
+      await cookieBox.clear();
+
+      print('✅ All authentication data cleared');
+    } catch (e) {
+      print('Error clearing saved data: $e');
+      rethrow;
+    }
+  }
+
+  /// 🔹 Clear specific auth data
+  static Future<void> clearAuthToken() async {
+    try {
+      final box = Hive.box('authBox');
+      await box.delete('authToken');
+      print('✅ Auth token cleared');
+    } catch (e) {
+      print('Error clearing auth token: $e');
+      rethrow;
+    }
+  }
+
+  /// 🔹 Clear user data
+  static Future<void> clearUserData() async {
+    try {
+      final box = Hive.box('authBox');
+      await box.delete('user');
+      print('✅ User data cleared');
+    } catch (e) {
+      print('Error clearing user data: $e');
+      rethrow;
+    }
+  }
+
+  /// 🔹 Clear cookies
+  static Future<void> clearCookies() async {
+    try {
+      final box = Hive.box('cookieBox');
+      await box.clear();
+      print('✅ Cookies cleared');
+    } catch (e) {
+      print('Error clearing cookies: $e');
+      rethrow;
+    }
+  }
+
+  /// 🔹 Save user data (helper method)
+  static Future<void> saveUser(User? userData) async {
+    try {
+      final box = Hive.box('authBox');
+      await box.put('user', userData);
+      print('✅ User data saved');
+    } catch (e) {
+      print('Error saving user data: $e');
+      rethrow;
+    }
+  }
+
+  /// 🔹 Save auth token (helper method)
+  static Future<void> saveAuthToken(String? token) async {
+    try {
+      final box = Hive.box('authBox');
+      await box.put('authToken', token);
+      print('✅ Auth token saved');
+    } catch (e) {
+      print('Error saving auth token: $e');
+      rethrow;
+    }
+  }
+
+  /// 🔹 Check if user is logged in
+  static bool get isLoggedIn {
+    final token = getSavedToken();
+    final user = getSavedUser();
+    return token != null && user != null;
+  }
+
+  /// 🔹 Get current user as User object (if exists)
+  static User? getCurrentUser() {
+    try {
+      final userData = getSavedUser();
+      if (userData != null && _fromJson != null) {
+        return _fromJson!(userData);
+      }
+      return null;
+    } catch (e) {
+      print('Error getting current user: $e');
+      return null;
+    }
+  }
+
+  /// 🔹 Fetch fresh user data from server
+  static Future<User?> fetchFreshUser() async {
+    try {
+      final authRepo = await authRepoAsync;
+      final token = getSavedToken();
+
+      if (token == null) {
+        print('❌ No auth token found');
+        return null;
+      }
+
+      // Fetch user from server using the profile endpoint
+      final userData = await authRepo.getUserProfile();
+
+      if (userData != null) {
+        // Save the fresh user data
+        await saveUser(userData);
+        print('✅ Fresh user data fetched and saved');
+        return _fromJson!(userData as Map<String, dynamic>);
+      }
+
+      return null;
+    } catch (e) {
+      print('Error fetching fresh user: $e');
+      return null;
+    }
+  }
+
+  /// 🔹 Login with fresh user data
+  static Future<User?> loginWithFreshUser({
+    required String email,
+    required String password,
+  }) async {
+    try {
+      final authRepo = await authRepoAsync;
+
+      // Clear any existing user data before login
+      await clearUserData();
+
+      // Perform login
+      final loginResult = await authRepo.login(email, password);
+
+      if (loginResult != null) {
+        // Fetch fresh user data after successful login
+        final freshUser = await fetchFreshUser();
+        return freshUser;
+      }
+
+      return null;
+    } catch (e) {
+      print('Error during login with fresh user: $e');
+      return null;
+    }
+  }
+
+  /// 🔹 Refresh current user data from server
+  static Future<User?> refreshCurrentUser() async {
+    try {
+      if (!isLoggedIn) {
+        print('❌ User not logged in, cannot refresh');
+        return null;
+      }
+
+      // Clear current user data and fetch fresh
+      await clearUserData();
+      return await fetchFreshUser();
+    } catch (e) {
+      print('Error refreshing current user: $e');
+      return null;
+    }
+  }
+
+  /// 🔹 Complete logout - clears all data and resets repository state
+  static Future<void> logout() async {
+    try {
+      // Clear all saved data
+      await clearSavedData();
+
+      // Optionally reset the repository
+      // _authRepo = null;
+
+      print('✅ Logout completed');
+    } catch (e) {
+      print('Error during logout: $e');
+      rethrow;
+    }
+  }
+
+  /// 🔹 Reset ZenifyAuth (for testing or complete reset)
+  static Future<void> reset() async {
+    try {
+      await clearSavedData();
+      _authRepo = null;
+      _initializationFuture = null;
+      print('✅ ZenifyAuth reset completed');
+    } catch (e) {
+      print('Error during reset: $e');
+      rethrow;
+    }
   }
 }

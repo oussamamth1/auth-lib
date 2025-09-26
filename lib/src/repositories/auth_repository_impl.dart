@@ -191,6 +191,8 @@ class AuthRepositoryImpl<T> implements AuthRepository<T> {
   Future<void> logout() async {
     if (!kIsWeb) await _cookieJar?.deleteAll();
     await _box.delete('ZENIFY_SESSION_ID');
+    await _box.delete('cookieBox');
+    await _box.delete('authBox');
     print("All cookies cleared");
     await _box.clear();
   }
@@ -254,6 +256,7 @@ class AuthRepositoryImpl<T> implements AuthRepository<T> {
       print("Invalid traveller data: missing email");
       return null;
     }
+    var b = await Hive.openBox('cookieBox');
 
     try {
       // Clear existing cookies/tokens
@@ -286,18 +289,19 @@ class AuthRepositoryImpl<T> implements AuthRepository<T> {
             }
 
             // Create user object with token and cookie
-            final userData = {
-              ...(resData['data'] as Map<String, dynamic>),
-              'token': resData['access_token'],
-              'cookie': cookieValue,
-            };
+            // final userData = {
+            //   ...(resData['data'] as Map<String, dynamic>),
+            //   'token': resData['access_token'],
+            //   'cookie': cookieValue,
+            // };
+            final savedCookie = await b.get('ZENIFY_SESSION_ID');
 
             print("Traveller login successful with password: $password");
             // final savedCookie = await b.get('ZENIFY_SESSION_ID');
             final injected = {
               ...(resData['data'] as Map<String, dynamic>),
               'token': resData['access_token'],
-              'cookie': "Cooool",
+              'cookie': savedCookie,
             };
 
             print("Injected user map: $injected");

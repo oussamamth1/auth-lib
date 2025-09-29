@@ -1,7 +1,11 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:zenify_auth/src/entities/user.dart';
+import 'package:zenify_auth/src/storage/secure_storage.dart';
 import 'package:zenify_auth/zenify_auth.dart';
 import '../repositories/auth_repository.dart';
 
@@ -21,6 +25,10 @@ class Traveller {
       user: json['user'] != null ? User.fromJson(json['user']) : null,
       code: json['code'],
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {'id': id, 'user': user?.toJson(), 'code': code};
   }
 }
 
@@ -69,24 +77,137 @@ class AuthState<T> {
   }
 }
 
+/// Listenable wrapper for GoRouter
+// class AuthStateListener extends ChangeNotifier {
+//   AuthStateListener(this._read);
+
+//   final Reader _read;
+
+//   @override
+//   void addListener(VoidCallback listener) {
+//     // Subscribe to auth state changes
+//     _read(authProvider.notifier).addListener((state) {
+//       listener();
+//     });
+//     super.addListener(listener);
+//   }
+// }
+
 /// Notifier for authentication state
 class AuthNotifier<T extends User> extends StateNotifier<AuthState<T>> {
   final AuthRepository<T> repository;
+  final AuthStorage _storage = AuthStorage();
+  bool _isInitialized = false;
+
+  // Stream controller for external listeners
+  final _stateController = StreamController<AuthState<T>>.broadcast();
+  Stream<AuthState<T>> get stream => _stateController.stream;
 
   AuthNotifier(this.repository)
     : super(AuthState<T>(status: AuthStatus.loading)) {
-    _checkLogin();
+    _initializeAuth();
   }
 
+  @override
+  set state(AuthState<T> value) {
+    super.state = value;
+    _stateController.add(value); // Emit state changes to stream
+  }
+
+  @override
+  void dispose() {
+    _stateController.close();
+    super.dispose();
+  }
+
+  // ===== Getters =====
+  bool get isLoggedIns => state.status == AuthStatus.authenticated;
+
+  String? get tokens => state.user?.token ?? state.token ?? "";
+  String? get cookies => state.user?.cookie ?? state.cookie ?? "";
+
+  /// Initialize auth state - restore session if available
+  Future<void> _initializeAuth() async {
+    try {
+      await _storage.init(); // Ensure storage is initialized
+
+      // Try to restore from storage first
+      final token = _storage.getToken();
+      final cookie = _storage.getCookie();
+      final userJson = _storage.getUserJson();
+      // tokens=_storage.getToken();
+      // cookies= _storage.getCookie();
+
+      if (token != null && cookie != null) {
+        // Set loading state with stored data (optimistic UI)
+        state = state.copyWith(
+          status: AuthStatus.authenticated,
+          token: token,
+          cookie: cookie,
+          user: userJson as T?,
+        );
+        print('ℹ️  sessionnnnn ${userJson} to restore');
+        // try {
+        //   // Verify session is still valid by fetching user profile
+        //   final user = await repository.getUserProfile();
+
+        //   if (user != null) {
+        //     state = state.copyWith(
+        //       user: user,
+        //       status: AuthStatus.authenticated,
+        //       isAuthenticated: true,
+        //       token: token,
+        //       cookie: cookie,
+        //       isLoading: false,
+        //     );
+        //     print('✅ Session restored successfully');
+        //     _isInitialized = true;
+        //     return;
+        //   }
+        // } catch (e) {
+        //   print(
+        //     '⚠️ Failed to restore session (token expired or network error): $e',
+        //   );
+        //  // await _storage.clear(); // Clear corrupted/expired data
+        // }
+      }
+
+      // No valid session found
+      state = state.copyWith(
+        status: AuthStatus.unauthenticated,
+        isAuthenticated: false,
+        isLoading: false,
+      );
+      print('ℹ️ No session to restore');
+    } catch (e) {
+      print('❌ Error initializing auth: $e');
+      state = state.copyWith(
+        status: AuthStatus.unauthenticated,
+        isAuthenticated: false,
+        isLoading: false,
+      );
+    } finally {
+      _isInitialized = true;
+    }
+  }
+
+  /// Check if user is logged in via repository
   Future<void> _checkLogin() async {
     final loggedIn = await repository.isLoggedIn();
     if (loggedIn) {
       final user = await repository.getUserProfile();
-      state = state.copyWith(
-        user: user,
-        status: AuthStatus.authenticated,
-        isAuthenticated: true,
-      );
+      if (user != null) {
+        state = state.copyWith(
+          user: user,
+          status: AuthStatus.authenticated,
+          isAuthenticated: true,
+        );
+      } else {
+        state = state.copyWith(
+          status: AuthStatus.unauthenticated,
+          isAuthenticated: false,
+        );
+      }
     } else {
       state = state.copyWith(
         status: AuthStatus.unauthenticated,
@@ -95,11 +216,35 @@ class AuthNotifier<T extends User> extends StateNotifier<AuthState<T>> {
     }
   }
 
-  Future<bool> login(String email, String password) async {
+  Future<T?> login(String email, String password) async {
     state = state.copyWith(isLoading: true, error: null);
 
     final user = await repository.login(email, password);
+    print('✅ loooog user ${user?.firstName}');
+    // Save to storage with user data
+    // await _storage.saveAuthData(
+    //   token: user?.token ?? '',
+    //   cookie: user?.cookie ?? '',
+    //   userId: user?.id ?? '',
+    //   userJson: user, // Save full user object
+    // );
+
     if (user != null) {
+      // Save to storage with user data
+      await _storage.saveAuthData(
+        token: user.token ?? '',
+        cookie: user.cookie ?? '',
+        userId: user.id ?? '',
+        userJson: User(
+          firstName: user?.firstName,
+          lastName: user?.lastName,
+          id: user?.id,
+          picture: user?.picture,
+          token: user?.token,
+          cookie: user?.cookie,
+        ), // Save full user object
+      );
+
       state = state.copyWith(
         user: user,
         status: AuthStatus.authenticated,
@@ -108,7 +253,7 @@ class AuthNotifier<T extends User> extends StateNotifier<AuthState<T>> {
         token: user.token,
         cookie: user.cookie,
       );
-      return true;
+      return user;
     } else {
       state = state.copyWith(
         user: null,
@@ -117,7 +262,7 @@ class AuthNotifier<T extends User> extends StateNotifier<AuthState<T>> {
         isLoading: false,
         error: 'Login failed. Please check your credentials.',
       );
-      return false;
+      return user;
     }
   }
 
@@ -126,11 +271,28 @@ class AuthNotifier<T extends User> extends StateNotifier<AuthState<T>> {
 
     final user = await repository.register(name, email, password);
     if (user != null) {
+      // Save to storage
+      await _storage.saveAuthData(
+        token: user.token ?? '',
+        cookie: user.cookie ?? '',
+        userId: user.id ?? '',
+                userJson: User(
+          firstName: user?.firstName,
+          lastName: user?.lastName,
+          id: user?.id,
+          picture: user?.picture,
+          token: user?.token,
+          cookie: user?.cookie,
+        ), // Save full user object
+      );
+
       state = state.copyWith(
         user: user,
         status: AuthStatus.authenticated,
         isAuthenticated: true,
         isLoading: false,
+        token: user.token,
+        cookie: user.cookie,
       );
       return true;
     } else {
@@ -149,12 +311,30 @@ class AuthNotifier<T extends User> extends StateNotifier<AuthState<T>> {
     state = state.copyWith(isLoading: true, error: null);
 
     final user = await repository.verifyCode(code);
+
     if (user != null) {
+      // Save to storage
+      await _storage.saveAuthData(
+        token: user.token ?? '',
+        cookie: user.cookie ?? '',
+        userId: user.id ?? '',
+                userJson: User(
+          firstName: user?.firstName,
+          lastName: user?.lastName,
+          id: user?.id,
+          picture: user?.picture,
+          token: user?.token,
+          cookie: user?.cookie,
+        ), // Save full user object
+      );
+
       state = state.copyWith(
         user: user,
         status: AuthStatus.authenticated,
         isAuthenticated: true,
         isLoading: false,
+        token: user.token,
+        cookie: user.cookie,
       );
       return true;
     } else {
@@ -171,13 +351,18 @@ class AuthNotifier<T extends User> extends StateNotifier<AuthState<T>> {
 
   Future<void> logout() async {
     await repository.logout();
+    await _storage.clear(); // Clear stored credentials
+
     state = state.copyWith(
       user: null,
       status: AuthStatus.unauthenticated,
       isAuthenticated: false,
       travellers: null,
       error: null,
+      token: null,
+      cookie: null,
     );
+
     SocketIOManager.instance.disconnect();
   }
 
@@ -188,8 +373,6 @@ class AuthNotifier<T extends User> extends StateNotifier<AuthState<T>> {
         user: profile,
         status: AuthStatus.authenticated,
         isAuthenticated: true,
-        // token: profile.token,
-        // cookie: profile.cookie,
       );
     } else {
       state = state.copyWith(
@@ -242,6 +425,14 @@ class AuthNotifier<T extends User> extends StateNotifier<AuthState<T>> {
       final user = await repository.loginWithTraveller(traveller);
 
       if (user != null) {
+        // Save to storage
+        await _storage.saveAuthData(
+          token: user.token ?? '',
+          cookie: user.cookie ?? '',
+          userId: user.id ?? '',
+          //userJson: user,
+        );
+
         state = state.copyWith(
           user: user,
           status: AuthStatus.authenticated,
@@ -267,13 +458,27 @@ class AuthNotifier<T extends User> extends StateNotifier<AuthState<T>> {
     }
   }
 
+  /// Manually set auth state (useful for restoring sessions)
+  void setAuthState(AuthState<T> newState) {
+    print("newStateeeeeeeeeee ${newState.user}");
+    state = newState;
+  }
+
   // Getters
   bool get isLoggedIn => state.status == AuthStatus.authenticated;
-  String? get token => state.user?.token ?? "";
-  String? get cookie => state.user?.cookie ?? "";
+  bool get isInitialized => _isInitialized;
+  String? get token => state.user?.token ?? state.token ?? "";
+  String? get cookie => state.user?.cookie ?? state.cookie ?? "";
 }
 
-/// Provider for AuthNotifier
+// /// Provider for AuthNotifier
+// final authProvider = StateNotifierProvider<AuthNotifier<User>, AuthState<User>>(
+//   (ref) => AuthNotifier<User>(ZenifyAuth.authRepo),
+// );
 final authProvider = StateNotifierProvider<AuthNotifier<User>, AuthState<User>>(
-  (ref) => AuthNotifier<User>(ZenifyAuth.authRepo),
+  (ref) {
+    final notifier = AuthNotifier<User>(ZenifyAuth.authRepo);
+    // notifier._initializeAuth() already restores session
+    return notifier;
+  },
 );

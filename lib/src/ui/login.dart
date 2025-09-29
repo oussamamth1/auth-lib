@@ -653,6 +653,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Widget _buildLoginForm() {
+final authState = ref.watch(authProvider);
+    final authNotifier = ref.watch(authProvider.notifier);
+
     return Container(
       padding: widget.formPadding ?? const EdgeInsets.all(24),
       margin: const EdgeInsets.all(16),
@@ -727,8 +730,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
                       try {
                         // Clear any existing cached user data before login
-                        await ZenifyAuth.clearUserData();
-
+                       // await ZenifyAuth.clearUserData();
+                        // final success = await authNotifier.login(
+                        //   _emailController.text,
+                        //   _passwordController.text,
+                        // );
                         var success = await ref
                             .read(authProvider.notifier)
                             .login(
@@ -738,14 +744,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
                         if (!mounted) return;
 
-                        final authState = ref.read(authProvider);
-                        final user = authState.user;
+                        //final authState = ref.read(authProvider);
+                       // final user = authState.user;
 
-                        if (success) {
+                        if (success!=null) {
                           // Optionally fetch fresh user profile after successful login
-                          await ref
-                              .read(authProvider.notifier)
-                              .fetchUserProfile();
+                          // await ref
+                          //     .read(authProvider.notifier)
+                          //     .fetchUserProfile();
                        //   await ZenifyAuth.saveUser(authState.user);
                         //  await ZenifyAuth.saveAuthToken(authState.user?.token);
                           _showSnackBar(context, "Login Successful!");

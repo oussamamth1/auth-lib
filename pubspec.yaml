@@ -17,6 +17,7 @@ dependencies:
   dio_cookie_manager: ^2.0.0
   cookie_jar: ^3.0.1
   socket_io_client: ^3.1.2
+  shared_preferences: ^2.2.3
 
 dev_dependencies:
   build_runner: ^2.4.6
